@@ -1,0 +1,108 @@
+services:
+  mongo:
+    image: mongo:7
+    container_name: talentdesk-mongo
+    restart: unless-stopped
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+      - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "try { rs.status().ok } catch (e) { rs.initiate({_id:'rs0',members:[{_id:0,host:'mongo:27017'}]}).ok }"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    container_name: talentdesk-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  qdrant:
+    image: qdrant/qdrant:v1.12.5
+    container_name: talentdesk-qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+  api:
+    build: ./server
+    container_name: talentdesk-api
+    restart: unless-stopped
+    environment:
+      PORT: ${PORT:-5000}
+      MONGODB_URI: ${MONGODB_URI:-mongodb://mongo:27017/talentdesk?replicaSet=rs0}
+      JWT_SECRET: ${JWT_SECRET:-local-development-secret-change-me}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-1d}
+      CLIENT_ORIGIN: ${CLIENT_ORIGIN:-http://localhost:5173}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      RAG_SCORE_THRESHOLD: ${RAG_SCORE_THRESHOLD:-0.42}
+      QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-talentdesk_documents}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      UPLOAD_DIR: ${UPLOAD_DIR:-/app/uploads}
+    ports:
+      - "5000:5000"
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+
+  worker:
+    build: ./server
+    container_name: talentdesk-worker
+    restart: unless-stopped
+    command: ["npm", "run", "worker"]
+    environment:
+      MONGODB_URI: ${MONGODB_URI:-mongodb://mongo:27017/talentdesk?replicaSet=rs0}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
+      QDRANT_COLLECTION: ${QDRANT_COLLECTION:-talentdesk_documents}
+      REDIS_HOST: ${REDIS_HOST:-redis}
+      REDIS_PORT: ${REDIS_PORT:-6379}
+      UPLOAD_DIR: ${UPLOAD_DIR:-/app/uploads}
+    volumes:
+      - uploads_data:/app/uploads
+    depends_on:
+      mongo:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+
+  client:
+    build: ./client
+    container_name: talentdesk-client
+    restart: unless-stopped
+    environment:
+      VITE_API_URL: ${VITE_API_URL:-http://localhost:5000/api}
+    ports:
+      - "5173:5173"
+    depends_on:
+      - api
+
+volumes:
+  mongo_data:
+  qdrant_data:
+  uploads_data:
