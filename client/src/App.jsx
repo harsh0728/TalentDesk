@@ -102,6 +102,7 @@ function App() {
     });
   };
   const moveStage = async (candidate, stage) => {
+    if (!isRecruiter) return;
     if (stage === candidate.stage) return;
     await request(async () => { await api.post(`/candidates/${candidate._id}/move-stage`, { stage }); await loadCandidates(); await loadJobs(); });
   };
@@ -171,7 +172,7 @@ function App() {
               <button className="icon-button" title="Refresh" onClick={()=>request(async()=>{await loadCandidates();await loadJobs();})}><RefreshCw size={16}/></button>
             </div>
             <div className="table-wrap"><table><thead><tr><th>Candidate</th><th>CTC (LPA)</th><th>Notice</th><th>Stage</th><th>Actions</th></tr></thead><tbody>
-              {candidates.items.map(c=><tr key={c._id}><td><b>{c.name}</b><span className="table-sub">{c.email}</span></td><td>{c.current_ctc} → {c.expected_ctc}</td><td>{c.notice_days} days</td><td><span className={`stage-badge ${c.stage.toLowerCase()}`}>{c.stage}</span></td><td><div className="row-actions"><button className="text-button" onClick={()=>openHistory(c)} title="Stage history"><Clock3 size={15}/></button>{isRecruiter && <><button className="text-button" onClick={()=>openCandidate("editCandidate",c)} title="Edit"><Pencil size={15}/></button><button className="text-button danger-text" onClick={()=>deleteCandidate(c)} title="Delete"><Trash2 size={15}/></button></>}</div></td></tr>)}
+              {candidates.items.map(c=><tr key={c._id}><td><b>{c.name}</b><span className="table-sub">{c.email}</span></td><td>{c.current_ctc} → {c.expected_ctc}</td><td>{c.notice_days} days</td><td><div className="table-stage-cell"><span className={`stage-badge ${c.stage.toLowerCase()}`}>{c.stage}</span>{isRecruiter && <select className="table-stage-select" value={c.stage} onChange={e=>moveStage(c,e.target.value)} title="Move candidate stage"><option disabled value={c.stage}>Move stage…</option>{STAGES.filter(s=>s!==c.stage).map(s=><option key={s} value={s}>{s}</option>)}</select>}</div></td><td><div className="row-actions"><button className="text-button" onClick={()=>openHistory(c)} title="Stage history"><Clock3 size={15}/></button>{isRecruiter && <><button className="text-button" onClick={()=>openCandidate("editCandidate",c)} title="Edit"><Pencil size={15}/></button><button className="text-button danger-text" onClick={()=>deleteCandidate(c)} title="Delete"><Trash2 size={15}/></button></>}</div></td></tr>)}
               {!candidates.items.length && <tr><td colSpan="5"><div className="empty">No candidates match these filters.</div></td></tr>}
             </tbody></table></div>
             <div className="pagination"><span>Showing {candidates.items.length} of {candidates.total} candidates</span><div><button className="icon-button" disabled={candidates.page<=1} onClick={()=>setFilters(f=>({...f,page:f.page-1}))}><ChevronLeft size={16}/></button><span>Page {candidates.page} of {candidates.pages}</span><button className="icon-button" disabled={candidates.page>=candidates.pages} onClick={()=>setFilters(f=>({...f,page:f.page+1}))}><ChevronRight size={16}/></button></div></div>
@@ -194,7 +195,7 @@ function App() {
 
     {history && <div className="overlay" onMouseDown={e=>{if(e.target===e.currentTarget)setHistory(null);}}><div className="modal history-modal"><div className="modal-heading"><div><p className="eyebrow">CANDIDATE ACTIVITY</p><h2>{history.candidate.name}</h2><p className="muted">Stage history</p></div><button className="icon-button" onClick={()=>setHistory(null)}><X size={18}/></button></div>
       <div className="timeline">{history.events.map((event,i)=><div className="timeline-item" key={event._id}><div className="timeline-marker">{i+1}</div><div><b>{event.from_stage ? `${event.from_stage} → ${event.to_stage}` : `Added as ${event.to_stage}`}</b><p className="muted small">{new Date(event.created_at).toLocaleString()} · {event.changed_by?.name || "Recruiter"}</p></div></div>)}</div>
-      <div className="stage-change"><label>Move to stage<select value={history.candidate.stage} onChange={e=>{const stage=e.target.value;moveStage(history.candidate,stage).then(()=>openHistory(history.candidate));}}>{STAGES.map(s=><option key={s}>{s}</option>)}</select></label></div>
+      <div className="stage-change">{isRecruiter ? <label>Move to stage<select value={history.candidate.stage} onChange={e=>{const stage=e.target.value;moveStage(history.candidate,stage).then(()=>openHistory(history.candidate));}}>{STAGES.map(s=><option key={s}>{s}</option>)}</select></label> : <span className="muted small">Read-only history view. Recruiter role required to advance candidate stages.</span>}</div>
     </div></div>}
   </div>;
 }
